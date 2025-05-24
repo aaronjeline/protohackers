@@ -1,0 +1,9 @@
+(executable
+ (public_name protohackers)
+ (name main)
+ (libraries protohackers))
+
+(executable
+ (public_name echoserv)
+ (name echoserv)
+ (libraries protohackers))

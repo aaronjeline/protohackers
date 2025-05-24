@@ -1,0 +1,3 @@
+(library
+ (name protohackers)
+ (libraries lwt lwt.unix))
