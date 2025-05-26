@@ -7,7 +7,7 @@ let parse_ipaddr = Unix.inet_addr_of_string
 module IO = Lwt_io
 module Unix = Lwt_unix
 
-let localhost = Unix.ADDR_INET (parse_ipaddr "127.0.0.1", 1338)
+let localhost = Unix.ADDR_INET (parse_ipaddr "0.0.0.0", 1337)
 
 let server _client_address socket = 
     let total = ref (Bytes.create 0) in
@@ -35,7 +35,9 @@ let server _client_address socket =
     
 
 let main () = 
+    let* _ = Lwt_io.printf "Starting\n" in
     let* _ = IO.establish_server_with_client_socket localhost server in
+    let* _ = Lwt_io.printf "Started echo servfer...\n" in
     let rec loop () = 
         let* () = Unix.sleep 1.0 in
         loop () 
