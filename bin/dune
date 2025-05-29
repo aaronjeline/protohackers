@@ -7,3 +7,8 @@
  (public_name echoserv)
  (name echoserv)
  (libraries protohackers))
+
+(executable
+ (public_name prime)
+ (name prime)
+ (libraries protohackers yojson))

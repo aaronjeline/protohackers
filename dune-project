@@ -19,7 +19,7 @@
  (name protohackers)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml dune lwt lwt_unix)
+ (depends ocaml dune lwt lwt_unix yojson)
  (tags
   (topics "to describe" your project)))
 
