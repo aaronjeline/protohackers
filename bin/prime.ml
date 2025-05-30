@@ -72,14 +72,19 @@ let parse_input line =
     of_key dict "method" (exact_string "isPrime");
     of_key dict "number" expect_int
 
-let is_composite x = 
-    (x <= 0) || (x mod 2) == 0
-
 let is_prime x = 
     match x with
-    | `Int 1 -> true
-    | `Int x -> not (is_composite x)
-    | _ -> false
+    | `Float _ -> false
+    | `Int x  ->
+        let rec loop i = 
+            if i == 1 then
+                true
+            else if i mod x == 0 then
+                false
+            else
+                loop (i - 1)
+        in
+        loop (x / 2)
 
 
 let encode_response is_prime =
@@ -102,7 +107,6 @@ let handle_failure exn socket =
     | _ ->
             let* () = Lwt_io.eprintf "Exception: %s\n" (Printexc.to_string exn) in
             send_response "malformed!" socket
-
 
 let server _ socket  =
     let rec loop () = 
