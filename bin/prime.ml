@@ -3,7 +3,6 @@ open Protohackers.Common
 exception SocketClosed
 
 let non_empty str = String.length str != 0
-
 let read_input socket = 
     let buf = Bytes.create 512 in
     let* () = Lwt_io.printf "Reading from socket...\n" in
@@ -11,15 +10,16 @@ let read_input socket =
     let* () = Lwt_io.printf "Read %d bytes\n" got in
     if got = 0 then
         raise SocketClosed;
-    Bytes.sub buf 0 got
-    |> Bytes.to_string 
-    |> String.split_on_char '\n' 
+    let msg = Bytes.sub buf 0 got |> Bytes.to_string in 
+    let* () = Lwt_io.printf "Got: `%s`\n" msg in
+    String.split_on_char '\n' msg
     |> List.filter non_empty
     |> return
 
 
 let send_response response socket = 
-    let buf = Bytes.of_string response in
+    let* () = Lwt_io.printf "Sending `%s`\n" response in
+    let buf = Bytes.of_string (String.cat response "\n") in
     let to_send = Bytes.length buf in
     let* () = Lwt_io.printf "Sending %d bytes\n" to_send in
     let rec loop start =
@@ -72,10 +72,13 @@ let parse_input line =
     of_key dict "method" (exact_string "isPrime");
     of_key dict "number" expect_int
 
+let is_composite x = 
+    (x <= 0) || (x mod 2) == 0
 
 let is_prime x = 
     match x with
-    | `Int x -> not ((x mod 2) == 0)
+    | `Int 1 -> true
+    | `Int x -> not (is_composite x)
     | _ -> false
 
 
@@ -98,7 +101,7 @@ let handle_failure exn socket =
             Lwt_io.eprintf "Connection closed\n"
     | _ ->
             let* () = Lwt_io.eprintf "Exception: %s\n" (Printexc.to_string exn) in
-            send_response "malformed!\n" socket
+            send_response "malformed!" socket
 
 
 let server _ socket  =
