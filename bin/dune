@@ -11,4 +11,5 @@
 (executable
  (public_name prime)
  (name prime)
- (libraries protohackers yojson))
+ (preprocess (pps ppx_deriving.show))
+ (libraries protohackers yojson zarith))

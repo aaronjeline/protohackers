@@ -15,6 +15,7 @@ depends: [
   "lwt"
   "lwt_unix"
   "yojson"
+  "zarith"
   "odoc" {with-doc}
 ]
 build: [
