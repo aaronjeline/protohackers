@@ -11,12 +11,15 @@ let localhost = Unix.ADDR_INET (parse_ipaddr "0.0.0.0", 1337)
 exception SocketClosed
 
 let server_wrapper server addr socket = 
-    let* () = Lwt_io.printf "Client connected...\n" in
-    try
-        server addr socket
-    with
-        SocketClosed -> 
-            Lwt_io.printf "Socket Closed\n"
+    Lwt.catch 
+    (fun () ->
+        let* () = Lwt_io.printf "Client connected...\n" in
+        server addr socket)
+    (fun exn ->
+        match exn with
+        | SocketClosed -> 
+                Lwt_io.printf "Socket closed\n"
+        | other -> raise other)
 
 
 let main name server = 
