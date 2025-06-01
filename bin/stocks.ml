@@ -40,8 +40,6 @@ let serialize_response (r:response) =
     buf
 
 
-exception SocketClosed
-
 let read_message socket =
     let buf = Bytes.create 9 in
     let rec loop read =
