@@ -13,3 +13,8 @@
  (name prime)
  (preprocess (pps ppx_deriving.show))
  (libraries protohackers yojson zarith))
+
+(executable
+  (public_name stocks)
+  (name stocks)
+  (libraries protohackers))
