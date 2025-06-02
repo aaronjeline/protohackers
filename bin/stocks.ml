@@ -64,8 +64,14 @@ let execute_query map t1 t2 =
         else
             (sum, len)
     in
-    let (sum, len) = M.fold f map (0,0) in 
-    sum / len
+    if t1 > t2 then
+        0 
+    else
+        let (sum, len) = M.fold f map (0,0) in 
+        if len = 0 then
+            0
+        else
+            sum / len
 
 let eval_msg msg map = 
     match msg with
