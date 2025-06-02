@@ -19,12 +19,13 @@ let server_wrapper server addr socket =
         match exn with
         | SocketClosed -> 
                 Lwt_io.printf "Socket closed\n"
-        | other -> raise other)
+        | other -> 
+                Lwt_io.printf "Unexpected exception: %s\n" (Printexc.to_string other))
 
 
 let main name server = 
     let* _ = Lwt_io.printf "Starting\n" in
-    let* _ = IO.establish_server_with_client_socket localhost server in
+    let* _ = IO.establish_server_with_client_socket localhost (server_wrapper server) in
     let* _ = Lwt_io.printf "Started %s servfer...\n" name in
     let rec loop () = 
         let* () = Unix.sleep 1.0 in
