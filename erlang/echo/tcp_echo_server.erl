@@ -32,7 +32,7 @@ stop() ->
 init([Port]) ->
     process_flag(trap_exit, true),
     {ok, _SupPid} = connection_sup:start_link(),
-    case gen_tcp:listen(Port, [binary, {packet,line}, {active, false},
+    case gen_tcp:listen(Port, [binary, {packet, raw}, {active, false},
                                {reuseaddr, true}]) of
         {ok, ListenSocket} ->
             io:format("TCP Server started on port ~p~n", [Port]),
