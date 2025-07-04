@@ -1,6 +1,7 @@
 mod types;
 mod verif;
 use anyhow::Result;
+use bytes::{BufMut, Bytes, BytesMut};
 use std::ops::ControlFlow;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
@@ -30,16 +31,16 @@ async fn spawn_server() -> anyhow::Result<()> {
 }
 
 #[tracing::instrument]
-async fn client(mut stream: TcpStream) -> anyhow::Result<()> {
-    let mut buf = [0; 1024];
+async fn client(stream: TcpStream) -> anyhow::Result<()> {
+    let mut socket = SocketReader::new(stream);
     loop {
-        let read = read_until_newline(&mut stream, &mut buf).await?;
-        match read {
+        let buf = socket.read().await?;
+        match buf {
             None => break,
-            Some(read) => {
-                debug!("Read {read} bytes: {}", String::from_utf8_lossy(&buf));
+            Some(buf) => {
+                debug!("Read bytes: {}", String::from_utf8_lossy(&buf));
                 if let ControlFlow::Break(()) =
-                    verif::process_requests(&buf[..read], &mut stream).await?
+                    verif::process_requests(&buf, &mut socket.socket).await?
                 {
                     break;
                 }
@@ -48,6 +49,49 @@ async fn client(mut stream: TcpStream) -> anyhow::Result<()> {
     }
     info!("Client disconnected");
     Ok(())
+}
+
+struct SocketReader {
+    socket: TcpStream,
+    slop_buffer: BytesMut,
+}
+
+impl SocketReader {
+    pub fn new(socket: TcpStream) -> Self {
+        Self {
+            socket,
+            slop_buffer: BytesMut::with_capacity(1024),
+        }
+    }
+
+    pub async fn read(&mut self) -> Result<Option<Vec<u8>>> {
+        let read = self.socket.read_buf(&mut self.slop_buffer).await?;
+        let p: &[u8] = &self.slop_buffer;
+        debug!("Contents of slop: {:?}", p);
+        if read == 0 {
+            Ok(None)
+        } else {
+            match self.last_newline() {
+                None => Ok(Some(vec![])),
+                Some(last_newline_idx) => {
+                    let to_return = self.slop_buffer.split_to(last_newline_idx);
+                    let _ = self.slop_buffer.split_to(1); // Drop the trailing newline
+                    Ok(Some(to_return.to_vec()))
+                }
+            }
+        }
+    }
+
+    fn last_newline(&self) -> Option<usize> {
+        let mut i = self.slop_buffer.len() - 1;
+        while i != 0 {
+            if self.slop_buffer[i] == b'\n' {
+                return Some(i);
+            }
+            i -= 1;
+        }
+        None
+    }
 }
 
 async fn read_until_newline(socket: &mut TcpStream, buffer: &mut [u8]) -> Result<Option<usize>> {
