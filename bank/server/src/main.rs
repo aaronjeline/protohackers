@@ -43,12 +43,12 @@ async fn server() -> Result<()> {
     Ok(())
 }
 
-struct Client {
-    socket: TcpStream,
+struct Client<T> {
+    socket: T,
     data: BTreeMap<i32, i32>,
 }
 
-impl Client {
+impl Client<TcpStream> {
     async fn start(socket: TcpStream, token: CancellationToken) {
         let mut me = Self {
             socket,
@@ -88,27 +88,18 @@ impl Client {
         debug!("Read buffer: {:?}", buf);
         let r = Request::deserialize(&buf)?;
         match r {
-            Request::Query { mintime, maxtime } => self.execute_query(mintime, maxtime).await?,
+            Request::Query { mintime, maxtime } => {
+                let avg = self.execute_query(mintime, maxtime);
+                self.write_int(avg).await?
+            }
             Request::Insert { timestamp, price } => self.execute_insert(timestamp, price),
         };
         Ok(())
     }
 
     #[tracing::instrument(skip(self))]
-    fn execute_insert(&mut self, timestamp: i32, price: i32) {
-        self.data.insert(timestamp, price);
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn execute_query(&mut self, mintime: i32, maxtime: i32) -> Result<()> {
-        let mut count = 0;
-        let mut sum = 0;
-        for (_, price) in self.data.range(mintime..maxtime) {
-            count += 1;
-            sum += price;
-        }
-        let avg = sum / count;
-        let buf = avg.to_be_bytes();
+    async fn write_int(&mut self, i: i32) -> Result<()> {
+        let buf = i.to_be_bytes();
         debug!("About to write {:?} to client", buf);
         self.socket.write_all(&buf).await?;
         debug!("write complete");
@@ -127,5 +118,51 @@ impl Client {
                 }
             }
         }
+    }
+}
+
+impl<T> Client<T> {
+    #[tracing::instrument(skip(self))]
+    fn execute_insert(&mut self, timestamp: i32, price: i32) {
+        self.data.insert(timestamp, price);
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn execute_query(&self, mintime: i32, maxtime: i32) -> i32 {
+        if mintime > maxtime {
+            return 0;
+        }
+        let mut count = 0;
+        let mut sum = 0;
+        for (_, price) in self.data.range(mintime..maxtime) {
+            count += 1;
+            sum += price;
+        }
+        if count == 0 {
+            return 0;
+        }
+        sum / count
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test() {
+        let mut c = Client {
+            socket: (),
+            data: BTreeMap::new(),
+        };
+        assert_eq!(0, c.execute_query(12288, 16384));
+        c.execute_insert(12345, 101);
+        c.execute_insert(12346, 102);
+        c.execute_insert(12347, 100);
+        c.execute_insert(40960, 7);
+        let r = c.execute_query(12288, 16384);
+        assert_eq!(r, 101);
+        assert_eq!(0, c.execute_query(500, 2));
+        assert_eq!(0, c.execute_query(2, 50));
     }
 }
