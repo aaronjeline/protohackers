@@ -45,7 +45,7 @@ async fn server() -> Result<()> {
 
 struct Client<T> {
     socket: T,
-    data: BTreeMap<i32, i32>,
+    data: BTreeMap<i64, i64>,
 }
 
 impl Client<TcpStream> {
@@ -139,7 +139,7 @@ impl Client<TcpStream> {
 impl<T> Client<T> {
     #[tracing::instrument(skip(self))]
     fn execute_insert(&mut self, timestamp: i32, price: i32) {
-        self.data.insert(timestamp, price);
+        self.data.insert(timestamp as i64, price as i64);
     }
 
     #[tracing::instrument(skip(self))]
@@ -149,14 +149,14 @@ impl<T> Client<T> {
         }
         let mut count = 0;
         let mut sum = 0;
-        for (_, price) in self.data.range(mintime..=maxtime) {
+        for (_, price) in self.data.range(mintime as i64..=maxtime as i64) {
             count += 1;
             sum += price;
         }
         if count == 0 {
             return 0;
         }
-        sum / count
+        (sum / count) as i32
     }
 }
 
@@ -184,6 +184,17 @@ mod test {
         assert_eq!(0, c.execute_query(500, 2));
         assert_eq!(0, c.execute_query(2, 50));
         assert_eq!(100, c.execute_query(12347, 12347));
+    }
+
+
+    #[test]
+    fn overflow_test() {
+        let mut c = Client { socket : (), data : BTreeMap::new() };
+        c.execute_insert(500, i32::max_value());
+        c.execute_insert(501, 5);
+        let r = c.execute_query(499, 502);
+        let expected = (i32::max_value() as i64 + 5) / 2;
+        assert_eq!(r as i64, expected);
     }
 
     fn request() -> impl Strategy<Value = Request> {
@@ -242,14 +253,14 @@ mod test {
     }
 
     fn insert_into_sorted(lst : &mut Vec<(i32, i32)>, x : (i32, i32)) -> Result<(), TestCaseError> {
-        prop_assert!(lst.is_sorted_by(|(t1,_), (t2,_)| t1 < t1));
+        prop_assert!(lst.is_sorted_by(|(t1,_), (t2,_)| t1 < t2));
         for i in 0..lst.len() {
             if lst[i].0 > x.0 {
                 lst.insert(i, x);
                 break;
             }
         }
-        prop_assert!(lst.is_sorted_by(|(t1,_), (t2,_)| t1 < t1));
+        prop_assert!(lst.is_sorted_by(|(t1,_), (t2,_)| t1 < t2));
         Ok(())
     }
 
