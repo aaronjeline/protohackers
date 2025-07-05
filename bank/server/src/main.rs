@@ -149,7 +149,7 @@ impl<T> Client<T> {
         }
         let mut count = 0;
         let mut sum = 0;
-        for (_, price) in self.data.range(mintime..maxtime) {
+        for (_, price) in self.data.range(mintime..=maxtime) {
             count += 1;
             sum += price;
         }
@@ -183,6 +183,7 @@ mod test {
         assert_eq!(r, 101);
         assert_eq!(0, c.execute_query(500, 2));
         assert_eq!(0, c.execute_query(2, 50));
+        assert_eq!(100, c.execute_query(12347, 12347));
     }
 
     fn request() -> impl Strategy<Value = Request> {
