@@ -60,7 +60,12 @@ impl Client<TcpStream> {
         };
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(
+        skip(self, token), 
+        fields(
+            // `%` serializes the peer IP addr with `Display`
+            peer_addr = %self.socket.peer_addr().unwrap()
+        ))]
     async fn run(&mut self, token: CancellationToken) -> Result<()> {
         loop {
             debug!("Reading from client scoket");
@@ -83,7 +88,12 @@ impl Client<TcpStream> {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(
+        skip(self), 
+        fields(
+            // `%` serializes the peer IP addr with `Display`
+            peer_addr = %self.socket.peer_addr().unwrap()
+        ))]
     async fn process_request(&mut self, buf: [u8; 9]) -> Result<()> {
         debug!("Read buffer: {:?}", buf);
         let r = Request::deserialize(&buf)?;
@@ -97,7 +107,12 @@ impl Client<TcpStream> {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(
+        skip(self), 
+        fields(
+            // `%` serializes the peer IP addr with `Display`
+            peer_addr = %self.socket.peer_addr().unwrap()
+        ))]
     async fn write_int(&mut self, i: i32) -> Result<()> {
         let buf = i.to_be_bytes();
         debug!("About to write {:?} to client", buf);
@@ -148,6 +163,8 @@ impl<T> Client<T> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use proptest::prelude::*;
+    use std::collections::HashSet;
 
     #[test]
     fn test() {
@@ -162,7 +179,85 @@ mod test {
         c.execute_insert(40960, 7);
         let r = c.execute_query(12288, 16384);
         assert_eq!(r, 101);
+        let r = c.execute_query(12345, 12347);
+        assert_eq!(r, 101);
         assert_eq!(0, c.execute_query(500, 2));
         assert_eq!(0, c.execute_query(2, 50));
     }
+
+    fn request() -> impl Strategy<Value = Request> {
+        let strat = (proptest::bool::ANY, -1000..1000, -1000..1000);
+        strat.prop_map(|(b,i1,i2)| 
+                if b {
+                    Request::Insert { timestamp : i1, price : i2 }
+                }  else {
+                    Request::Query { mintime : i1, maxtime : i2 }
+                }
+        )
+    }
+
+    fn requests() -> impl Strategy<Value = Vec<Request>> {
+        proptest::collection::vec(request(), 0..500)
+    }
+
+    fn execute_simulation(reqs : Vec<Request>) -> Result<(), TestCaseError> {
+        let mut seen = HashSet::new();
+        let mut data = vec![];
+        let mut client = Client { socket : (), data : BTreeMap::new() };
+        for req in reqs {
+            match req {
+                Request::Insert { timestamp, price } => {
+                    if seen.contains(&timestamp) {
+                        return Ok(());
+                    }
+                    seen.insert(timestamp);
+                    insert_into_sorted(&mut data, (timestamp, price))?;
+                    client.execute_insert(timestamp, price);
+                }
+                Request::Query { mintime, maxtime } => {
+                    let r = client.execute_query(mintime, maxtime);
+                    if mintime > maxtime {
+                        prop_assert_eq!(r, 0);
+                    } else {
+                        let mut count = 0;
+                        let mut sum = 0;
+                        for (time,price) in data.iter() {
+                            if *time >= mintime && *time <= maxtime {
+                                count += 1;
+                                sum += price;
+                            }
+                            if count == 0 {
+                                prop_assert_eq!(r, 0);
+                            } else {
+                                prop_assert_eq!(r, sum / count);
+                            }
+                        }
+
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn insert_into_sorted(lst : &mut Vec<(i32, i32)>, x : (i32, i32)) -> Result<(), TestCaseError> {
+        prop_assert!(lst.is_sorted_by(|(t1,_), (t2,_)| t1 < t1));
+        for i in 0..lst.len() {
+            if lst[i].0 > x.0 {
+                lst.insert(i, x);
+                break;
+            }
+        }
+        prop_assert!(lst.is_sorted_by(|(t1,_), (t2,_)| t1 < t1));
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn simulate(reqs in requests()) {
+            execute_simulation(reqs)?;
+        }
+    }
+
+
 }
